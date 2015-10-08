@@ -1,0 +1,41 @@
+#!/bin/sh
+
+NC='\e[0m'
+GR='\e[1;30m'
+
+if [ -z "$2" ]; then
+    echo "No argument supplied">&2
+    cat << EOF >&2
+Usage:
+    $0 <source> <target>
+Example:
+    $0 ./src/ ./package.tar.gz
+EOF
+    exit 1
+fi
+
+DIR="$1"
+TARGET="$2"
+
+if [ ! -d "$DIR" ]; then
+    echo "Source path $DIR doesn't exist">&2
+    exit 2
+fi
+
+if [ ! -d "$( dirname "$TARGET" )" ]; then
+    echo "Target path $TARGET doesn't exist">&2
+    exit 3
+fi
+
+WD=$( pwd )
+TN="$( mktemp )"
+cd "$DIR"
+echo "tar -czvf \"$TN\" *"
+echo -en "$GR"
+tar -czvf "$TN" *
+EC=$?
+echo -en "$NC"
+cd "$WD"
+echo "mv \"$TN\" \"$TARGET\""
+mv "$TN" "$TARGET"
+exit $EC

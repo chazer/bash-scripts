@@ -1,0 +1,29 @@
+#!/bin/sh
+
+NC='\e[0m'
+GR='\e[1;30m'
+
+if [ -z "$3" ]; then
+    echo "No argument supplied">&2
+    cat << EOF >&2
+Usage:
+    $0 <path> <search> <replace>
+Example:
+    $0 ./src/ XXXX plugin
+EOF
+    exit 1
+fi
+
+DIR="$1"
+SEARCH="$2"
+REPLACE="$3"
+
+if [ ! -d "$DIR" ]; then
+    echo "Source path $DIR doesn't exist">&2
+    exit 2
+fi
+
+XSEARCH="$( echo "$SEARCH" | sed -e 's/[]\/$*.^|[]/\\&/g' )"
+XREPLACE="$( echo "$REPLACE" | sed -e 's/[]\/$*.^|[]/\\&/g' )"
+
+find -L "${DIR}/" -type f -exec sh -c 'mv "$1" "$(echo "$1" | sed s/'"${XSEARCH}"'/'"${XREPLACE}"'/)"' _ {} \;

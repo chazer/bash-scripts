@@ -1,0 +1,148 @@
+#!/bin/sh
+
+# Colors
+NC='\e[0m'
+GR='\e[1;30m'
+YE='\e[1;33m'
+RD='\e[1;31m'
+CY='\e[0;36m'
+
+function error()
+{
+    E=$1; shift
+    echo -e "$RD$*$NC">&2
+    [ $E -gt 0 ] && exit $E
+}
+
+function print()
+{
+    echo -e "$CY$*$NC"
+}
+
+function help()
+{
+    cat << EOF >&1
+
+Usage:
+    $0 [option] <path> <target>
+
+    path - sources directory
+    target - result archive file name
+
+Options:
+    --dir    path to working directory instead of temp dir
+    -A       file or dir for copy to working directory before start
+    --help   show this help
+
+Example:
+    $0 -A src/ -A vendor/ -A bin/run
+EOF
+}
+
+function escape()
+{
+    echo "$( printf '%q' "$*" )"
+}
+
+function run()
+{
+    echo -e "$GR> $*$NC"
+    eval $*
+    return $?
+}
+
+SOURCES=""
+ADD=""
+WD=
+DEBUG=false
+CLEAR=false
+CWD=$( escape $( pwd ) )
+
+# Read options
+while [[ "$1" =~ ^- ]]; do
+   OPT="$1"; shift
+
+   [ "$OPT" == "--help"  ] && help && exit 0
+
+   if [ "$OPT" == "--debug"  ]; then
+       DEBUG=true
+       continue
+   fi
+
+   if [ "$OPT" == "--dir"  ]; then
+       [ $# -gt 0 ] || error 5 "No value supplied"
+       [ -d "$1" ] || error 3 "Not found target directory $1"
+       WD="$1"; shift
+       continue
+   fi
+
+   if [ "$OPT" == "-A"  ]; then
+       [ $# -gt 0 ] || error 5 "No value supplied"
+       [ -e "$1" ] || error 4 "File '$1' not exists"
+       ADD="${ADD} $( printf '%q' "$1" )"; shift
+       continue
+   fi
+   shift
+done
+
+if [ $# -eq 0 ]; then
+    error 0 "No argument supplied"; help; exit 1
+fi
+
+# Read params
+while [ $# -gt 1 ]; do
+   [ -e "$CWD/$1" ] || error 4 "File or directory '$1' is not exists"
+   SOURCES="${SOURCES} $( printf '%q' "$1" )"
+   shift
+done
+
+# Read last param
+TARGET=$( escape "$1" ); shift
+
+# Use temp directory
+if [ -d "$WD" ]; then
+    WD="$( cd "$WD"; pwd )"
+else
+    WD="$( mktemp -d )";
+    CLEAR=true
+fi
+WD=$( escape "$WD" )
+
+# Debug dump
+if $DEBUG; then
+    echo -en "$YE"
+    echo " Current directory: ${CWD}"
+    echo " Working directory: ${WD}"
+    echo " Sources list: ${SOURCES}"
+    echo " Additions list: ${ADD}"
+    echo " Result file save to: ${TARGET}"
+    echo -en "$NC"
+fi
+
+if [ "$SOURCES" != "" ]; then
+    print "Copy files"
+    run "cp -R --parents -t $WD $SOURCES"
+fi
+
+if [ "$ADD" != "" ]; then
+    print "Copy additional files"
+    run "cp -R -t $WD $ADD"
+fi
+
+print "Show working directory content"
+run "ls -la --color $WD"
+
+print "Start compilation"
+cd $WD
+TEMPFILE=$( mktemp -up ./ ).phar
+run "composer install -o --no-dev"
+run "phar-composer build . $TEMPFILE"
+cd $CWD
+run "mv $WD/$TEMPFILE $TARGET"
+
+if $CLEAR; then
+    print "Clear directory $WD"
+    run "rm -rf $WD"
+fi
+
+print "Done"
