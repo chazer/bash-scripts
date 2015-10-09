@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 
 NC='\e[0m'
 GR='\e[1;30m'
