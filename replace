@@ -1,0 +1,122 @@
+#!/bin/sh
+
+# Colors
+NC='\e[0m'
+GR='\e[1;30m'
+YE='\e[1;33m'
+RD='\e[1;31m'
+CY='\e[0;36m'
+
+function error()
+{
+    E=$1; shift
+    echo -e "$RD$*$NC">&2
+    [ $E -gt 0 ] && exit $E
+}
+
+function print()
+{
+    echo -e "$CY$*$NC"
+}
+
+function help()
+{
+    cat << EOF >&1
+
+Usage:
+    $0 [option] [<files>]
+
+    files - one or more files to replace in
+
+Options:
+    --debug      show debug info
+    -R <s> <r>   search and replace <s> to <r> in all files
+    --help       show this help
+
+Example:
+    $0 -R "{ABC}" "abc" -R "{XYZ}" "123" doc.txt
+    echo "doc.txt" | $0 -R "{ABC}" "abc" -R "{XYZ}" "123"
+EOF
+}
+
+function escape()
+{
+    echo "$( printf '%q' "$*" )"
+}
+
+function run()
+{
+    echo -e "$GR> $*$NC"
+    eval $*
+    return $?
+}
+
+DEBUG=false
+PIPE=false; [ -t 0 ] || PIPE=true
+CWD=$( escape $( pwd ) )
+SEARCH=()
+REPLACE=()
+
+# Read options
+while [[ "$1" =~ ^- ]]; do
+   OPT="$1"; shift
+
+   [ "$OPT" == "--help"  ] && help && exit 0
+
+   if [ "$OPT" == "--debug"  ]; then
+       DEBUG=true
+       continue
+   fi
+
+   if [ "$OPT" == "--stdin"  ]; then
+       PIPE=true
+       continue
+   fi
+
+   if [ "$OPT" == "-R"  ]; then
+       [ $# -gt 1 ] || error 5 "No value supplied"
+       #[ -e "$1" ] || error 4 "File '$1' not exists"
+       i=${#SEARCH[@]}
+       SEARCH[$i]="$1"; shift
+       REPLACE[$i]="$1"; shift
+       continue
+   fi
+   shift
+done
+
+# Debug dump
+if $DEBUG; then
+    echo -en "$YE"
+    echo " Current directory: ${CWD}"
+    echo " Search list: ${SEARCH[@]}"
+    echo " Replace list: ${REPLACE[@]}"
+    echo -en "$NC"
+fi
+
+for i in "${!SEARCH[@]}"; do
+  SEARCH[$i]="$( echo "${SEARCH[$i]}" | sed -e 's/[]\/$*.^|[]/\\&/g' )"
+  REPLACE[$i]="$( echo "${REPLACE[$i]}" | sed -e 's/[]\/$*.^|[]/\\&/g' )"
+done
+
+if $DEBUG; then
+    echo
+    echo -en "$YE"
+    echo " Replaces table"
+    for i in "${!SEARCH[@]}"; do
+        printf "  #%s\t/%s/\t>\t/%s/\n" "$i" "${SEARCH[$i]}" "${REPLACE[$i]}"
+    done
+    echo -en "$NC"
+    echo
+fi
+
+IFS=$'\n' read -d '' -r -a FILES
+for f in "${FILES[@]}" "$@" ; do
+    [ -f "$f" ] || error 7 "File not found: $f"
+    echo "Replace in file $f">&2
+    for i in "${!SEARCH[@]}"; do
+        echo "- apply changes #$i">&2
+        sed -i "s/${SEARCH[$i]}/${REPLACE[$i]}/g" "$f"
+    done
+done
+
+print "Done"
