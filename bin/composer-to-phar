@@ -130,10 +130,10 @@ run "ls -la --color $WD"
 print "Start compilation"
 cd $WD
 TEMPFILE=$( mktemp -up ./ ).phar
-run "composer install -o --no-dev"
-run "phar-composer build . $TEMPFILE"
+run "composer install -o --no-dev" || error 6 "Error on composer install"
+run "phar-composer build . $TEMPFILE" || error 6 "Error on phar-composer build"
 cd $CWD
-run "mv $WD/$TEMPFILE $TARGET"
+run "mv $WD/$TEMPFILE $TARGET" || error 6 "Error on move to target"
 
 if $CLEAR; then
     print "Clear directory $WD"
