@@ -110,6 +110,8 @@ fi
 # Read arguments
 # last argument
 for TARGET; do true; done
+# unset last argument
+set -- "${@:1:$(($#-1))}"
 
 if [ ! -f "$IDX" ]; then
     echo "Index file not exist: $IDX" | error
@@ -142,8 +144,9 @@ IDX=$(basename "$IDX")
     cat "$IDX" | while read pattern; do
         for filename in $pattern; do
             (
-                cd "$WORKDIR"
-                run cp -R "$SOURCE/$filename" "$@"
+                DIR="$(dirname "$filename")"
+                [ -d "$TARGET/$DIR" ] || mkdir -p "$TARGET/$DIR"
+                run cp -R "$filename" "$@" "$TARGET/$DIR/"
             ) || exit 3
         done
         #d="$( dirname $pattern )"
