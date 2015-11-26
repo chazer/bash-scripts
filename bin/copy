@@ -1,0 +1,155 @@
+#!/bin/bash
+
+# Colors
+NC='\e[0m'
+GR='\e[1;30m'
+YE='\e[1;33m'
+RD='\e[1;31m'
+CY='\e[0;36m'
+
+VERB=false
+DEBUG=false
+FORCE=0
+IDX=
+CP_OPTIONS=
+
+
+escape() { echo "$( printf '%q' "$*" )"; }
+
+color_print() { echo -ne "$1"; cat | sed -r "s/\x1B\[([0-9]{1,3}((;[0-9]{1,3})*)?)?[m|K]//g"; echo -ne "$NC"; }
+
+print_command() {
+    local whitespace="[[:space:]]"
+    (
+        echo -n ">";
+        for i in "$@"; do
+            if [[ $i =~ $whitespace ]]; then i=\"$i\"; fi
+            echo -n " $i"
+        done
+    ) | color_print $GR
+    echo ""
+}
+
+error() { cat | color_print "$RD" >&2; }
+
+debug() { if $DEBUG; then cat | color_print "$YE" >&2; fi; }
+
+logger() { if $VERB; then cat >&2; fi; }
+
+run() { print_command "$@" | logger; eval "$@"; return $?; }
+
+help() {
+    cat << EOF >&1
+Usage:
+    $0 [OPTION] <target>
+    $0 [OPTION] [FILE] ... <DEST>
+
+Copy files by glog patterns
+
+    DEST - copying desination path
+    FILE - file for copying, identical to CP command
+
+Options:
+    -i,--file   path to with glob patterns
+    -v,-vv      verbosity level
+    -f          create target directory
+    -h,--help   show this help
+
+Example:
+    $0 -f --file patterns.txt ./target/
+    $0 -v file.dat ./target/
+    $0 -f --file patterns.txt file.dat ./target/
+EOF
+}
+
+# Read options
+while [[ "$1" =~ ^- ]]; do
+   OPT="$1"; shift
+   case "$OPT" in
+       -h|--help)
+            help && exit 0
+            ;;
+        -vv)
+            DEBUG=true
+            VERB=true
+            continue
+            ;;
+        -v)
+            VERB=true
+            continue
+            ;;
+        -f)
+            FORCE=1
+            continue
+            ;;
+        -i|--file)
+            IDX="$1"; shift
+            continue
+            ;;
+        *)
+            CP_OPTIONS="${CP_OPTIONS}$1 "
+            #echo -e "${RD}Unknown option $OPT${NC}"
+            #exit 1
+            continue
+            ;;
+   esac
+   shift
+done
+
+(
+    echo " VERB=$VERB"
+    echo " FORCE=$FORCE"
+    echo " IDX=$IDX"
+) | debug
+
+if [ "$IDX" == "" ]; then
+    run cp $*
+    exit $?
+fi
+
+# Read arguments
+# last argument
+for TARGET; do true; done
+
+if [ ! -f "$IDX" ]; then
+    echo "Index file not exist: $IDX" | error
+    exit 1;
+fi
+
+if [ ! -d "$TARGET" ]; then
+    if [ $FORCE -ne 1 ]; then
+        echo "Target path not exist: $TARGET" | error
+        exit 2;
+    fi
+    run mkdir -p "$TARGET"
+fi
+
+WORKDIR="$(pwd)"
+SOURCE="$(cd "$(dirname "$IDX")"; pwd)"
+TARGET="$(cd "$TARGET"; pwd)"
+IDX=$(basename "$IDX")
+
+(
+    echo " WORKDIR=$WORKDIR"
+    echo " SOURCE=$SOURCE"
+    echo " TARGET=$TARGET"
+) | debug
+
+(
+    cd "$SOURCE"
+    (echo "Files for copying:"; cat "$IDX"; echo "") | logger
+    (echo "Copying to \"$TARGET\"") | logger
+    cat "$IDX" | while read pattern; do
+        for filename in $pattern; do
+            (
+                cd "$WORKDIR"
+                run cp -R "$SOURCE/$filename" "$@"
+            ) || exit 3
+        done
+        #d="$( dirname $pattern )"
+        #[ -d "$TARGET/$d" ] || run mkdir -p "$TARGET/$d"
+        #run cp -R $pattern "$TARGET/$d/"
+    done
+    echo "done" | logger
+)
+run ls -la "$TARGET" 2>&1 | debug
